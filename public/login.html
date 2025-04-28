@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head><title>Giriş Yap</title></head>
+<body>
+  <h2>Giriş Yap</h2>
+  <form id="loginForm">
+    <input type="text" name="username" placeholder="Kullanıcı adı" required><br>
+    <input type="password" name="password" placeholder="Şifre" required><br>
+    <button type="submit">Giriş</button>
+  </form>
+  <p><a href="/register.html">Hesabın yok mu? Kayıt ol</a></p>
+
+  <script>
+    document.getElementById('loginForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const form = new FormData(e.target);
+      const body = {
+        username: form.get('username'),
+        password: form.get('password')
+      };
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (res.ok) window.location.href = '/index.html';
+      else alert(data.message);
+    };
+  </script>
+</body>
+</html>

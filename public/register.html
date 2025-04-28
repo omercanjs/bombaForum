@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head><title>Kayıt Ol</title></head>
+<body>
+  <h2>Kayıt Ol</h2>
+  <form id="registerForm">
+    <input type="text" name="username" placeholder="Kullanıcı adı" required><br>
+    <input type="password" name="password" placeholder="Şifre" required><br>
+    <button type="submit">Kayıt</button>
+  </form>
+  <p><a href="/login.html">Zaten hesabın var mı? Giriş yap</a></p>
+
+  <script>
+    document.getElementById('registerForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const form = new FormData(e.target);
+      const body = {
+        username: form.get('username'),
+        password: form.get('password')
+      };
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert('Kayıt başarılı, giriş yapabilirsiniz.');
+        window.location.href = '/login.html';
+      } else {
+        alert(data.message);
+      }
+    };
+  </script>
+</body>
+</html>

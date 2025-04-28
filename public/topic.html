@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Konu Detayı</title>
+  <meta charset="UTF-8">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      background-color: #121212;
+      color: #eee;
+      cursor: url("cursors/bomb.png") 0 0, auto;
+      overflow-x: hidden;
+    }
+
+    .bg-effect {
+      position: fixed;
+      width: 100vw;
+      height: 100vh;
+      background: radial-gradient(circle at var(--x, 50%) var(--y, 50%), rgba(255,255,255,0.05), transparent 60%);
+      pointer-events: none;
+      z-index: 0;
+      transition: background 0.2s ease;
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+    }
+
+    .card {
+      background-color: #1e1e1e;
+      border: 1px solid #333;
+      color: #eee;
+      border-radius: 0.6rem;
+      padding: 1rem;
+    }
+
+    .form-control {
+      background-color: #2c2c2c;
+      color: #fff;
+      border: 1px solid #444;
+    }
+
+    .form-control::placeholder {
+      color: #aaa;
+    }
+
+    .form-control:focus {
+      background-color: #2c2c2c;
+      color: #fff;
+      border-color: #666;
+      box-shadow: none;
+    }
+
+    .dropdown-menu {
+      background-color: #2a2a2a;
+      border: none;
+    }
+
+    .dropdown-menu a {
+      color: #fff;
+    }
+
+    .admin-badge {
+      background: linear-gradient(90deg, red, orange);
+      padding: 0.25rem 0.5rem;
+      border-radius: 0.4rem;
+      font-weight: bold;
+      margin-left: 0.5rem;
+      color: #fff;
+      animation: flicker 1s infinite alternate;
+    }
+
+    @keyframes flicker {
+      from { text-shadow: 0 0 2px red; }
+      to { text-shadow: 0 0 12px orange; }
+    }
+    .post-meta {
+  color: #f1f1f1;
+  font-size: 1rem;
+  font-weight: 600;
+  font-style: italic;
+  letter-spacing: 0.3px;
+}
+
+  </style>
+</head>
+<body>
+<div class="bg-effect"></div>
+
+<div class="container mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 id="topicTitle">Konu Başlığı</h2>
+    <div class="dropdown">
+      <button class="btn btn-dark dropdown-toggle" type="button" data-bs-toggle="dropdown">
+        <span id="username">User</span>
+        <span id="adminBadge"></span>
+      </button>
+      <ul class="dropdown-menu dropdown-menu-end">
+        <li><a class="dropdown-item" href="#" onclick="logout()">Çıkış Yap</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <p id="topicMeta" class="post-meta"></p>
+  
+  <div class="card mb-4">
+    <p id="topicContent"></p>
+    <button id="reportBtn" class="btn btn-outline-danger mt-2" onclick="reportTopic()">Konuyu Raporla</button>
+    <button id="deleteTopicBtn" class="btn btn-outline-warning mt-2 d-none" onclick="deleteTopic()">Konuyu Sil</button>
+  </div>
+
+  <h4>Cevaplar</h4>
+  <ul id="replyList" class="list-group mb-4"></ul>
+
+  <h5>Yeni Cevap Yaz</h5>
+  <form id="replyForm">
+    <input type="text" id="replyInput" class="form-control mb-2" placeholder="Cevabınızı yazın..." required>
+    <button type="submit" class="btn btn-primary">Gönder</button>
+  </form>
+</div>
+
+<script>
+const params = new URLSearchParams(window.location.search);
+const postId = params.get('id');
+let currentUser = '';
+let isAdmin = false;
+let currentPost = null;
+
+async function getUser() {
+  const res = await fetch('/api/auth/me', { credentials: 'include' });
+  if (res.ok) {
+    const data = await res.json();
+    currentUser = data.user.username;
+    isAdmin = data.user.isAdmin;
+
+    if (isAdmin) {
+      document.getElementById('username').textContent = data.user.username;
+      document.getElementById('adminBadge').innerHTML = '<span class="admin-badge">🔥 Admin</span>';
+    } else {
+      document.getElementById('username').textContent = data.user.username;
+      document.getElementById("adminBadge").innerHTML = '<span class="user-badge">👤 User</span>';
+    }
+  }
+}
+
+async function loadTopic() {
+  const res = await fetch('/api/posts', { credentials: 'include' });
+  const posts = await res.json();
+  currentPost = posts.find(p => p._id === postId);
+
+  if (!currentPost) {
+    document.getElementById('topicTitle').innerText = 'Konu bulunamadı';
+    return;
+  }
+
+  document.getElementById('topicTitle').innerText = currentPost.title;
+  document.getElementById('topicMeta').innerText = `Yazar: ${currentPost.author} | ${new Date(currentPost.date).toLocaleString()}`;
+  document.getElementById('topicContent').innerText = currentPost.content;
+
+  if (currentPost.reportedBy?.includes(currentUser)) {
+    const btn = document.getElementById('reportBtn');
+    btn.disabled = true;
+    btn.textContent = 'Zaten raporladınız';
+  }
+
+  if (isAdmin) {
+    document.getElementById('deleteTopicBtn').classList.remove('d-none');
+  }
+
+  const replyList = document.getElementById('replyList');
+  replyList.innerHTML = '';
+
+  (currentPost.replies || []).forEach(r => {
+    const li = document.createElement('li');
+    li.className = 'list-group-item bg-dark text-light border-secondary';
+
+    const reportedCount = currentPost.reportedReplies?.filter(rep => rep.replyId == r._id)?.length || 0;
+    const userReported = currentPost.reportedReplies?.some(rep => rep.replyId == r._id && rep.user === currentUser);
+
+    li.innerHTML = `
+      <strong>${r.user}</strong>: ${r.message}
+      <br><small class="text-muted">${new Date(r.date).toLocaleString()}</small>
+      ${reportedCount > 0 ? `<br><span class="badge bg-danger">Rapor: ${reportedCount}</span>` : ''}
+      <div class="mt-2">
+        ${isAdmin ? `<button class="btn btn-sm btn-warning me-2" onclick="deleteReply('${r._id}')">Sil</button>` : ''}
+        <button class="btn btn-sm btn-outline-danger" onclick="reportReply('${r._id}')" ${userReported ? 'disabled' : ''}>
+          ${userReported ? 'Zaten raporladınız' : 'Yorumu Raporla'}
+        </button>
+      </div>
+    `;
+    replyList.appendChild(li);
+  });
+}
+
+document.getElementById('replyForm').onsubmit = async (e) => {
+  e.preventDefault();
+  const message = document.getElementById('replyInput').value;
+
+  await fetch(`/api/posts/${postId}/reply`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ message })
+  });
+
+  document.getElementById('replyInput').value = '';
+  loadTopic();
+};
+
+async function reportTopic() {
+  const res = await fetch(`/api/posts/${postId}/report`, {
+    method: 'POST',
+    credentials: 'include'
+  });
+  alert((await res.json()).message);
+  loadTopic();
+}
+
+async function reportReply(replyId) {
+  const res = await fetch(`/api/posts/${postId}/replies/${replyId}/report`, {
+    method: 'POST',
+    credentials: 'include'
+  });
+  alert((await res.json()).message);
+  loadTopic();
+}
+
+async function deleteTopic() {
+  if (!confirm("Bu konuyu silmek istiyor musun?")) return;
+  await fetch(`/api/posts/${postId}`, {
+    method: 'DELETE',
+    credentials: 'include'
+  });
+  alert("Konu silindi.");
+  window.location.href = 'index.html';
+}
+
+async function deleteReply(replyId) {
+  if (!confirm("Bu cevabı silmek istiyor musun?")) return;
+  await fetch(`/api/posts/${postId}/replies/${replyId}`, {
+    method: 'DELETE',
+    credentials: 'include'
+  });
+  loadTopic();
+}
+
+getUser().then(loadTopic);
+
+// mouse tracking background
+document.addEventListener("mousemove", (e) => {
+  const bg = document.querySelector(".bg-effect");
+  const x = e.clientX / window.innerWidth * 100;
+  const y = e.clientY / window.innerHeight * 100;
+  bg.style.setProperty('--x', `${x}%`);
+  bg.style.setProperty('--y', `${y}%`);
+});
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
